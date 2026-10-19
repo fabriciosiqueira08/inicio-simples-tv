@@ -6,6 +6,8 @@ Feita para uma Philips 2K com Google TV (Android 11), mas roda em qualquer Andro
 
 ## Como é
 
+![Tela inicial rodando na TV](docs/tela.png)
+
 - **Vitrine:** o app em foco aparece grande no topo (nome + banner), e o fundo ganha um brilho com a cor dominante do banner.
 - **Relógio de mostrador:** hora, dois-pontos em ember, minuto leve, dia da semana e data.
 - **Saudação** que muda com a hora (bom dia / boa tarde / boa noite), com nomes opcionais.
