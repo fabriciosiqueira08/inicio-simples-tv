@@ -91,7 +91,8 @@ public class Home extends Activity {
     private ScrollView scroll;
     private LinearLayout content, heroText;
     private TextView heroName, heroMeta, heroWhere;
-    private TextView greetingView;
+    private TextView greetingView, weatherCity, weatherTemp, weatherSky, weatherRange;
+    private LinearLayout weather;
     private ImageView artBack, artFront;
     private String greeting, focusKey, focusSection, heroKey;
     private Card pendingSnap;
@@ -179,7 +180,13 @@ public class Home extends Activity {
         mm.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             public void onTextChanged(CharSequence s, int a, int b, int c) { }
-            public void afterTextChanged(Editable s) { updateGreeting(); }
+            public void afterTextChanged(Editable s) {
+                updateGreeting();
+                if (weather != null) {
+                    showWeather(); // dado velho some sozinho
+                    Weather.update(Home.this, weatherShown);
+                }
+            }
         });
         time.addView(mm);
         clock.addView(time);
@@ -198,6 +205,34 @@ public class Home extends Activity {
         wlp.topMargin = dp(5);
         when.addView(clockPart("d 'de' MMMM", regular, 15, TEXT), wlp);
         clock.addView(when);
+        // tempo: mesmo par do dia/data (rótulo em versalete em cima, valor embaixo); some sem cidade configurada
+        weather = new LinearLayout(this);
+        weather.setGravity(Gravity.CENTER_VERTICAL);
+        View rule2 = new View(this);
+        rule2.setBackgroundColor(HAIRLINE);
+        weather.addView(rule2, new LinearLayout.LayoutParams(rlp));
+        LinearLayout wbox = new LinearLayout(this);
+        wbox.setOrientation(LinearLayout.VERTICAL);
+        weatherCity = text(medium, 12, TEXT2);
+        weatherCity.setAllCaps(true);
+        weatherCity.setLetterSpacing(0.14f);
+        weatherCity.setMaxLines(1);
+        weatherCity.setEllipsize(TextUtils.TruncateAt.END);
+        weatherCity.setMaxWidth(dp(220)); // "São José dos Campos" cabe; mais que isso não invade a vitrine
+        wbox.addView(weatherCity, new LinearLayout.LayoutParams(-2, -2));
+        LinearLayout wnow = new LinearLayout(this);
+        weatherTemp = text(medium, 15, TEXT);
+        weatherSky = text(regular, 15, TEXT2);
+        weatherRange = text(regular, 15, TEXT3);
+        wnow.addView(weatherTemp);
+        LinearLayout.LayoutParams wslp = new LinearLayout.LayoutParams(-2, -2);
+        wslp.leftMargin = dp(8);
+        wnow.addView(weatherSky, wslp);
+        wnow.addView(weatherRange, new LinearLayout.LayoutParams(wslp));
+        wbox.addView(wnow, new LinearLayout.LayoutParams(wlp));
+        weather.addView(wbox);
+        clock.addView(weather);
+        showWeather();
         left.addView(clock);
 
         greetingView = text(medium, 19, TEXT);
@@ -334,6 +369,7 @@ public class Home extends Activity {
     // nomes e chave do TMDB ficam no aparelho, não no código:
     // adb shell am start -n br.simples.home/.Home --es nomes "Ana e Beto"   (--es nomes "" apaga)
     // adb shell am start -n br.simples.home/.Home --es tmdb SUA_API_KEY     (--es tmdb "" desliga)
+    // adb shell am start -n br.simples.home/.Home --es cidade Florianópolis  (--es cidade "" desliga)
     private void saveExtras(Intent i) {
         if (i == null) return;
         String n = i.getStringExtra(NOMES);
@@ -350,7 +386,25 @@ public class Home extends Activity {
             uso.edit().putString(Trending.KEY, k).apply();
             Trending.update(this, artW, true, rebuild);
         }
+        String c = i.getStringExtra(Weather.CITY);
+        if (c != null && c.trim().length() <= 60) Weather.setCity(this, c.trim(), weatherShown);
     }
+
+    private void showWeather() {
+        String[] w = Weather.current(uso);
+        weather.setVisibility(w == null ? View.GONE : View.VISIBLE);
+        if (w == null) return;
+        weatherCity.setText(w[0]);
+        weatherTemp.setText(w[1]);
+        weatherSky.setText(w[2]);
+        weatherRange.setText(w[3]);
+    }
+
+    private final Runnable weatherShown = new Runnable() {
+        public void run() {
+            if (!isDestroyed()) showWeather();
+        }
+    };
 
     @Override
     protected void onNewIntent(Intent i) {
@@ -364,6 +418,7 @@ public class Home extends Activity {
         super.onResume();
         load();
         Trending.update(this, artW, false, rebuild);
+        Weather.update(this, weatherShown);
     }
 
     // a busca termina em outra thread; se a tela já fechou, ignora

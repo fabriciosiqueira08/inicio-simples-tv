@@ -1,6 +1,6 @@
 # Início Simples
 
-Tela inicial leve para Android TV / Google TV: sem anúncios, sem recomendação patrocinada, sem serviço em segundo plano. Só um relógio, uma saudação, uma vitrine do item em foco, uma fileira opcional com o que está em alta nos seus apps de streaming e a grade com todos os apps.
+Tela inicial leve para Android TV / Google TV: sem anúncios, sem recomendação patrocinada, sem serviço em segundo plano. Só um relógio com o tempo da sua cidade, uma saudação, uma vitrine do item em foco, uma fileira opcional com o que está em alta nos seus apps de streaming e a grade com todos os apps.
 
 Feita para uma Philips 2K com Google TV (Android 11), mas roda em qualquer Android TV com Android 8 ou mais novo.
 
@@ -12,6 +12,7 @@ Feita para uma Philips 2K com Google TV (Android 11), mas roda em qualquer Andro
 
 - **Vitrine:** o app em foco aparece grande no topo (nome + banner), e o fundo ganha um brilho com a cor dominante do banner.
 - **Relógio de mostrador:** hora, dois-pontos em ember, minuto leve, dia da semana e data.
+- **Tempo** (opcional): temperatura agora, céu e máxima/mínima do dia, ao lado da data. Veja [abaixo](#tempo).
 - **Saudação** que muda com a hora (bom dia / boa tarde / boa noite), com nomes opcionais.
 - **Em alta na semana** (opcional): filmes e séries em alta no [TMDB](https://www.themoviedb.org/) que estão nos apps de streaming instalados na TV. OK abre o app certo. Veja [abaixo](#em-alta-na-semana-tmdb).
 - **Grade 16:9** em ordem alfabética, com "Mais usados" no topo assim que você começa a abrir apps. O cartão em foco cresce e ganha um anel ember.
@@ -70,6 +71,18 @@ Os nomes ficam salvos no aparelho, não no código:
 adb shell am start -n br.simples.home/.Home --es nomes "'Ana e Beto'"   # "Boa noite, Ana e Beto"
 adb shell am start -n br.simples.home/.Home --es nomes "''"             # volta a só "Boa noite"
 ```
+
+## Tempo
+
+Opcional, sem chave e sem cadastro, pelo [Open-Meteo](https://open-meteo.com/). A cidade fica salva só no aparelho:
+
+```bash
+adb shell am start -n br.simples.home/.Home --es cidade "'Campinas SP'"
+adb shell am start -n br.simples.home/.Home --es cidade "'São José, Santa Catarina'"   # cidade com nome repetido
+adb shell am start -n br.simples.home/.Home --es cidade "''"                           # desliga
+```
+
+Sem nada depois do nome, vale a cidade mais populosa com esse nome. Depois da vírgula você filtra pelo estado ou país. O tempo atualiza no máximo a cada 30 minutos. Sem internet, a TV mostra o último dado por até 6 horas e depois esconde o bloco, para não exibir temperatura velha.
 
 ## Em alta na semana (TMDB)
 
@@ -132,5 +145,7 @@ adb shell pm list packages -d    # lista os desativados
 ## Licenças
 
 A fonte Ubuntu é distribuída sob a [Ubuntu Font Licence 1.0](launcher/assets/fonts/UFL.txt).
+
+Dados do tempo: [Open-Meteo](https://open-meteo.com/) (CC BY 4.0).
 
 Este produto usa a API do TMDB, mas não é endossado nem certificado pelo TMDB. Títulos, imagens e disponibilidade vêm do [TMDB](https://www.themoviedb.org/) e do JustWatch.
