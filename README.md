@@ -26,7 +26,13 @@ cd launcher
 ANDROID_HOME=~/Android/Sdk JAVA_HOME=/caminho/do/jdk-17 ./build.sh
 ```
 
-Na primeira vez o `build.sh` cria uma chave de assinatura `chave.jks`. **Guarde essa chave**: sem ela, uma versão nova não instala por cima da antiga. Também dá para apontar para uma chave existente com `KEYSTORE=/caminho/chave.jks`.
+Na primeira vez o `build.sh` cria uma chave de assinatura `chave.jks` (e avisa). **Guarde essa chave, de preferência com uma cópia fora do computador.** O Android só instala uma versão nova por cima da antiga se as duas tiverem a mesma chave. Com outra chave, `adb install -r` falha com `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Aí o único caminho é desinstalar o Início Simples, e com o launcher do Google desativado a TV cai na tela de emergência do sistema até você instalar de novo.
+
+Em outro clone ou outra máquina, aponte para a chave que a TV já conhece:
+
+```bash
+KEYSTORE=/caminho/da/chave.jks ./build.sh
+```
 
 ## Instalar e definir como tela inicial
 

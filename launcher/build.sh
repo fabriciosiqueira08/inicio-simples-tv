@@ -15,8 +15,13 @@ JDK=${JAVA_HOME:?defina JAVA_HOME apontando pra um JDK 17}/bin
 KS=${KEYSTORE:-chave.jks}
 
 rm -rf build && mkdir -p build/classes build/dex
-[ -f "$KS" ] || "$JDK/keytool" -genkeypair -keystore "$KS" -storepass android -keypass android \
-  -alias home -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Inicio Simples" >/dev/null
+if [ ! -f "$KS" ]; then
+  # chave nova = app "diferente" pro Android: não instala por cima de uma versão assinada com outra
+  echo "AVISO: $KS não existe, criando uma chave NOVA." >&2
+  echo "       Se esta TV já tem o Início Simples, use a chave antiga: KEYSTORE=/caminho/chave.jks ./build.sh" >&2
+  "$JDK/keytool" -genkeypair -keystore "$KS" -storepass android -keypass android \
+    -alias home -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Inicio Simples" >/dev/null
+fi
 
 ASSETS=(); [ -d assets ] && ASSETS=(-A assets)
 "$BT/aapt2" link -o build/base.apk -I "$JAR" --manifest AndroidManifest.xml "${ASSETS[@]}"
