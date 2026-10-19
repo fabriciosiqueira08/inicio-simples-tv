@@ -4,6 +4,8 @@ Tela inicial leve para Android TV / Google TV: sem anúncios, sem recomendação
 
 Feita para uma Philips 2K com Google TV (Android 11), mas roda em qualquer Android TV com Android 8 ou mais novo.
 
+**Não roda em LG (webOS) nem Samsung (Tizen)**, que não são Android. Nelas dá para usar com um aparelho Android TV no HDMI, como um Chromecast com Google TV (não testado). Fire TV não serve: as versões novas do Fire OS bloqueiam trocar a tela inicial.
+
 ## Como é
 
 ![Tela inicial rodando na TV](docs/tela.png)
