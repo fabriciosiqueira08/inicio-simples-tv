@@ -9,3 +9,7 @@ launcher/build/
 
 # backups da TV têm IDs do aparelho e dados de rede
 backup-*/
+
+# mockups do brainstorming
+.superpowers/
+.impeccable/

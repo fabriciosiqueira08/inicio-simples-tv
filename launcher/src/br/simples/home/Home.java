@@ -13,6 +13,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -27,9 +28,11 @@ import android.text.TextWatcher;
 import android.text.style.ForegroundColorSpan;
 import android.view.FocusFinder;
 import android.view.Gravity;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -58,7 +61,7 @@ public class Home extends Activity {
     static final int TEXT = 0xFFF4F4F5, TEXT2 = 0xFFB4B5BC, TEXT3 = 0xFF8E8F98; // contraste sobre NIGHT: 16.5, 8.8, 5.6
     static final int COLS = 5;
     static final String NOMES = "nomes";
-    static final int TV = 0, PHONE = 1, SYSTEM = 2;
+    static final int TV = 0, PHONE = 1, SYSTEM = 2, TITLE = 3;
 
     static class App {
         final String label, key;
@@ -66,6 +69,7 @@ public class Home extends Activity {
         final boolean banner;
         final int kind;
         final Intent intent;
+        String meta, where; // só título do TMDB: "Filme · 2026 · ★ 7,8" e o app onde assistir
 
         App(String label, String key, Drawable art, boolean banner, int kind, Intent intent) {
             this.label = label;
@@ -83,10 +87,10 @@ public class Home extends Activity {
     private final Map<String, Integer> tints = new HashMap<>();
     private SharedPreferences uso;
 
-    private int pad, gapIn, innerW, innerH, snapEdge;
+    private int pad, gapIn, innerW, innerH, artW, snapEdge;
     private ScrollView scroll;
     private LinearLayout content, heroText;
-    private TextView heroName, heroMeta;
+    private TextView heroName, heroMeta, heroWhere;
     private TextView greetingView;
     private ImageView artBack, artFront;
     private String greeting, focusKey, focusSection, heroKey;
@@ -126,7 +130,6 @@ public class Home extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         uso = getSharedPreferences("uso", MODE_PRIVATE);
-        saveNames(getIntent());
         if (bold == null) {
             AssetManager am = getAssets();
             light = Typeface.createFromAsset(am, "fonts/Ubuntu-Light.ttf");
@@ -141,7 +144,8 @@ public class Home extends Activity {
         gapIn = dp(24);
         innerW = (getResources().getDisplayMetrics().widthPixels - 2 * margin - (COLS - 1) * gapIn) / COLS;
         innerH = innerW * 9 / 16;
-        int artW = 2 * innerW + gapIn, artH = artW * 9 / 16;
+        artW = 2 * innerW + gapIn;
+        int artH = artW * 9 / 16;
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -214,15 +218,29 @@ public class Home extends Activity {
         heroText.setOrientation(LinearLayout.VERTICAL);
         heroName = text(bold, 34, TEXT);
         heroName.setLetterSpacing(-0.03f);
-        heroName.setSingleLine(true); // duas linhas não cabem com relógio e saudação na coluna
+        heroName.setMaxLines(1); // duas linhas não cabem com relógio e saudação na coluna
         heroName.setEllipsize(TextUtils.TruncateAt.END);
+        // título de filme longo encolhe até 24sp antes de cortar com reticências
+        // (setSingleLine quebraria isso: rolagem horizontal faz o texto "caber" sempre)
+        heroName.setAutoSizeTextTypeUniformWithConfiguration(24, 34, 1, TypedValue.COMPLEX_UNIT_SP);
         heroText.addView(heroName);
+        LinearLayout metaRow = new LinearLayout(this);
+        metaRow.setGravity(Gravity.CENTER_VERTICAL);
         heroMeta = text(regular, 14, TEXT2);
         heroMeta.setSingleLine(true);
         heroMeta.setEllipsize(TextUtils.TruncateAt.END);
+        metaRow.addView(heroMeta, new LinearLayout.LayoutParams(-2, -2));
+        // selo "onde assistir": o único ember cheio da tela, só quando o foco é um título
+        heroWhere = text(medium, 13, 0xFFFFFFFF); // branco sobre ember-700: 5,9:1
+        heroWhere.setBackground(round(EMBER_DEEP, dp(6)));
+        heroWhere.setPadding(dp(10), dp(4), dp(10), dp(4));
+        heroWhere.setVisibility(View.GONE);
+        LinearLayout.LayoutParams wplp = new LinearLayout.LayoutParams(-2, -2);
+        wplp.leftMargin = dp(12);
+        metaRow.addView(heroWhere, wplp);
         LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(-1, -2);
         mlp.topMargin = dp(6);
-        heroText.addView(heroMeta, mlp);
+        heroText.addView(metaRow, mlp);
         left.addView(heroText);
         hero.addView(left, new LinearLayout.LayoutParams(3 * innerW + 2 * gapIn, artH));
 
@@ -288,6 +306,7 @@ public class Home extends Activity {
         root.addView(scroll, slp);
 
         setContentView(root);
+        saveExtras(getIntent());
     }
 
     private TextClock clockPart(String format, Typeface tf, float sp, int color) {
@@ -312,29 +331,47 @@ public class Home extends Activity {
         greetingView.setText(t);
     }
 
-    // nomes da saudação ficam no aparelho, não no código:
+    // nomes e chave do TMDB ficam no aparelho, não no código:
     // adb shell am start -n br.simples.home/.Home --es nomes "Ana e Beto"   (--es nomes "" apaga)
-    private void saveNames(Intent i) {
-        String n = i == null ? null : i.getStringExtra(NOMES);
-        if (n == null) return;
-        n = n.trim();
-        if (n.length() > 40) n = n.substring(0, 40); // activity exportada: qualquer app pode mandar o extra
-        uso.edit().putString(NOMES, n).apply();
-        updateGreeting();
+    // adb shell am start -n br.simples.home/.Home --es tmdb SUA_API_KEY     (--es tmdb "" desliga)
+    private void saveExtras(Intent i) {
+        if (i == null) return;
+        String n = i.getStringExtra(NOMES);
+        if (n != null) {
+            n = n.trim();
+            if (n.length() > 40) n = n.substring(0, 40); // activity exportada: qualquer app pode mandar o extra
+            uso.edit().putString(NOMES, n).apply();
+            updateGreeting();
+        }
+        String k = i.getStringExtra(Trending.KEY);
+        if (k != null) {
+            k = k.trim();
+            if (!k.isEmpty() && !k.matches("[0-9a-fA-F]{32}")) return; // só formato de API key v3
+            uso.edit().putString(Trending.KEY, k).apply();
+            Trending.update(this, artW, true, rebuild);
+        }
     }
 
     @Override
     protected void onNewIntent(Intent i) {
         super.onNewIntent(i);
         setIntent(i);
-        saveNames(i);
+        saveExtras(i);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         load();
+        Trending.update(this, artW, false, rebuild);
     }
+
+    // a busca termina em outra thread; se a tela já fechou, ignora
+    private final Runnable rebuild = new Runnable() {
+        public void run() {
+            if (!isDestroyed()) build();
+        }
+    };
 
     private void load() {
         PackageManager pm = getPackageManager();
@@ -385,8 +422,9 @@ public class Home extends Activity {
             public int compare(App a, App b) { return n.get(b.key) - n.get(a.key); }
         });
         if (top.size() > COLS) top = top.subList(0, COLS);
-        if (!top.isEmpty()) section("Mais usados", null, top, cards);
-        section("Todos os apps", String.valueOf(apps.size()), apps, cards);
+        if (!top.isEmpty()) section("Mais usados", null, top, false, cards);
+        section("Em alta na semana", "dados TMDB", trending(), true, cards); // crédito exigido pelo uso grátis
+        section("Todos os apps", String.valueOf(apps.size()), apps, false, cards);
 
         Card target = cards.isEmpty() ? null : cards.get(0);
         for (Card k : cards) {
@@ -400,7 +438,26 @@ public class Home extends Activity {
         target.requestFocus();
     }
 
-    private void section(String title, String count, List<App> list, List<Card> out) {
+    // títulos em alta que dá pra assistir num app instalado agora (desativou o app, o título some)
+    private List<App> trending() {
+        List<App> out = new ArrayList<>();
+        List<Trending.Title> list = Trending.latest();
+        if (list == null || uso.getString(Trending.KEY, "").isEmpty()) return out; // sem chave = recurso desligado
+        PackageManager pm = getPackageManager();
+        for (Trending.Title t : list) {
+            if (out.size() == 15) break;
+            if (t.art == null || !Trending.resolve(t, pm)) continue;
+            Intent i = Trending.launch(pm, t.pkg);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            App a = new App(t.name, t.key, new BitmapDrawable(getResources(), t.art), true, TITLE, i);
+            a.meta = t.meta;
+            a.where = t.app;
+            out.add(a);
+        }
+        return out;
+    }
+
+    private void section(String title, String count, List<App> list, boolean oneRow, List<Card> out) {
         if (list.isEmpty()) return;
         LinearLayout sec = new LinearLayout(this);
         sec.setOrientation(LinearLayout.VERTICAL);
@@ -418,19 +475,67 @@ public class Home extends Activity {
         }
         h.setPadding(pad, 0, 0, 0);
         sec.addView(h);
+        if (oneRow) {
+            oneRow(sec, title, list, out);
+        } else {
+            grid(sec, title, list, out);
+        }
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, -2);
+        slp.topMargin = content.getChildCount() == 0 ? 0 : dp(22);
+        content.addView(sec, slp);
+    }
+
+    // fileira única que rola pro lado; a folga em volta deixa o cartão ampliado e o anel sem corte
+    private void oneRow(LinearLayout sec, String title, List<App> list, List<Card> out) {
+        final int room = dp(12);
+        HorizontalScrollView hs = new HorizontalScrollView(this) {
+            // rola além do cartão: o anel ampliado não corta na borda e meio vizinho aparece como "tem mais"
+            @Override
+            protected int computeScrollDeltaToGetChildRectOnScreen(Rect r) {
+                int extra = room + innerW / 2;
+                return super.computeScrollDeltaToGetChildRectOnScreen(new Rect(r.left - extra, r.top, r.right + extra, r.bottom));
+            }
+        };
+        hs.setFocusable(false);
+        hs.setHorizontalScrollBarEnabled(false);
+        hs.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        LinearLayout row = edgeStopRow();
+        // o HSV recorta a fileira nos limites dela: a folga tem que ser da fileira, não do HSV
+        row.setPadding(room, room, room, room);
+        row.setClipToPadding(false);
+        for (int i = 0; i < list.size(); i++) {
+            Card c = card(list.get(i), title);
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(innerW + 2 * pad, innerH + 2 * pad);
+            if (i > 0) clp.leftMargin = gapIn - 2 * pad;
+            row.addView(c, clp);
+            out.add(c);
+        }
+        hs.addView(row);
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(-1, -2);
+        hlp.leftMargin = hlp.rightMargin = hlp.bottomMargin = -room;
+        hlp.topMargin = dp(10) - room;
+        sec.addView(hs, hlp);
+    }
+
+    // fileira incompleta ou no fim: sem isso a seta pro lado pula na diagonal pra outra fileira
+    private LinearLayout edgeStopRow() {
+        LinearLayout row = new LinearLayout(this) {
+            @Override
+            public View focusSearch(View focused, int dir) {
+                if (dir != View.FOCUS_LEFT && dir != View.FOCUS_RIGHT) return super.focusSearch(focused, dir);
+                View v = FocusFinder.getInstance().findNextFocus(this, focused, dir);
+                return v != null ? v : focused;
+            }
+        };
+        row.setClipChildren(false);
+        return row;
+    }
+
+    private void grid(LinearLayout sec, String title, List<App> list, List<Card> out) {
         LinearLayout row = null;
         for (int i = 0; i < list.size(); i++) {
             if (i % COLS == 0) {
-                row = new LinearLayout(this) {
-                    // fileira incompleta: sem isso a seta pro lado pula na diagonal pra outra fileira
-                    @Override
-                    public View focusSearch(View focused, int dir) {
-                        if (dir != View.FOCUS_LEFT && dir != View.FOCUS_RIGHT) return super.focusSearch(focused, dir);
-                        View v = FocusFinder.getInstance().findNextFocus(this, focused, dir);
-                        return v != null ? v : focused;
-                    }
-                };
-                row.setClipChildren(false);
+                row = edgeStopRow();
                 LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, -2);
                 rlp.topMargin = i == 0 ? dp(10) : gapIn - 2 * pad;
                 sec.addView(row, rlp);
@@ -441,9 +546,6 @@ public class Home extends Activity {
             row.addView(c, clp);
             out.add(c);
         }
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, -2);
-        slp.topMargin = content.getChildCount() == 0 ? 0 : dp(22);
-        content.addView(sec, slp);
     }
 
     private final View.OnFocusChangeListener onFocus = new View.OnFocusChangeListener() {
@@ -462,7 +564,12 @@ public class Home extends Activity {
             App a = ((Card) v).app;
             try {
                 startActivity(a.intent);
-                uso.edit().putInt(a.key, uso.getInt(a.key, 0) + 1).apply();
+                if (a.kind == TITLE) {
+                    // os apps não aceitam link direto pro título de forma confiável: abre o app e lembra o nome
+                    Toast.makeText(Home.this, "Procure por “" + a.label + "” no " + a.where, Toast.LENGTH_LONG).show();
+                } else {
+                    uso.edit().putInt(a.key, uso.getInt(a.key, 0) + 1).apply();
+                }
             } catch (RuntimeException e) { // ActivityNotFound, Security e afins: launcher nunca cai
                 Toast.makeText(Home.this, "Não deu pra abrir " + a.label, Toast.LENGTH_SHORT).show();
             }
@@ -479,6 +586,7 @@ public class Home extends Activity {
             img.setScaleType(ImageView.ScaleType.CENTER_CROP);
             img.setImageDrawable(copy(a.art));
             face.addView(img, new FrameLayout.LayoutParams(-1, -1));
+            if (a.kind == TITLE) titleOverlay(face, a);
         } else {
             // app sem banner: o ícone sozinho não diz o nome, então o cartão escreve
             LinearLayout col = new LinearLayout(this);
@@ -503,6 +611,28 @@ public class Home extends Activity {
         return c;
     }
 
+    // a cena do TMDB não traz o nome escrito: véu escuro embaixo (só pra leitura) + nome + app num canto
+    private void titleOverlay(FrameLayout face, App a) {
+        View scrim = new View(this);
+        scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x00000000, 0xD9000000}));
+        face.addView(scrim, new FrameLayout.LayoutParams(-1, innerH * 3 / 5, Gravity.BOTTOM));
+        TextView name = text(medium, 13, TEXT);
+        name.setSingleLine(true);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        name.setText(a.label);
+        FrameLayout.LayoutParams nlp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        nlp.leftMargin = nlp.rightMargin = nlp.bottomMargin = dp(10);
+        face.addView(name, nlp);
+        TextView where = text(medium, 10, TEXT);
+        where.setText(a.where);
+        where.setBackground(round(0xB3000000, dp(4)));
+        where.setPadding(dp(6), dp(3), dp(6), dp(3));
+        FrameLayout.LayoutParams wlp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        wlp.topMargin = wlp.rightMargin = dp(8);
+        face.addView(where, wlp);
+    }
+
     // o mesmo Drawable em duas Views briga por bounds; cada uso ganha sua cópia
     private static Drawable copy(Drawable d) {
         Drawable.ConstantState cs = d.getConstantState();
@@ -512,7 +642,9 @@ public class Home extends Activity {
     // a rolagem só para em âncoras (topo de seção com título, ou topo de fileira), então a
     // primeira fileira visível é sempre inteira; escolhe a menor âncora que ainda mostra o foco
     private void snap(Card c, boolean smooth) {
-        View row = (View) c.getParent();
+        // sobe até o filho direto da seção: fileira da grade, ou o HorizontalScrollView da fileira única
+        View row = c;
+        while (((View) row.getParent()).getParent() != content) row = (View) row.getParent();
         ViewGroup focusSec = (ViewGroup) row.getParent();
         int bottom = focusSec.getTop() + row.getBottom() + snapEdge;
         int vh = scroll.getHeight();
@@ -531,9 +663,16 @@ public class Home extends Activity {
     }
 
     private void showHero(App a) {
-        int k = uso.getInt(a.key, 0);
-        String kind = a.kind == TV ? "App de TV" : a.kind == PHONE ? "App de celular" : "Sistema";
-        heroMeta.setText(k == 0 ? kind : kind + "  ·  aberto " + k + (k == 1 ? " vez" : " vezes"));
+        if (a.kind == TITLE) {
+            heroMeta.setText(a.meta);
+            heroWhere.setText(a.where);
+            heroWhere.setVisibility(View.VISIBLE);
+        } else {
+            int k = uso.getInt(a.key, 0);
+            String kind = a.kind == TV ? "App de TV" : a.kind == PHONE ? "App de celular" : "Sistema";
+            heroMeta.setText(k == 0 ? kind : kind + "  ·  aberto " + k + (k == 1 ? " vez" : " vezes"));
+            heroWhere.setVisibility(View.GONE);
+        }
         // mesmo app (volta de um app, ou o mesmo nas duas seções): só o contador muda, sem piscar a vitrine
         if (a.key.equals(heroKey)) return;
         heroKey = a.key;
