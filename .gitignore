@@ -1,0 +1,11 @@
+# build
+launcher/build/
+*.apk
+*.idsig
+
+# chave de assinatura: nunca no git
+*.jks
+*.keystore
+
+# backups da TV têm IDs do aparelho e dados de rede
+backup-*/
