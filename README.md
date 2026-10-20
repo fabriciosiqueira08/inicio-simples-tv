@@ -63,6 +63,8 @@ adb shell input keyevent KEYCODE_HOME
 
 Nada é desinstalado: `pm disable-user` só desativa, e o `restaurar.sh` desfaz.
 
+> **Os botões de app do controle param de funcionar** (YouTube, Prime Video, Netflix…), pelo menos em TVs com Realtek, como a Philips/KTC. Nelas o controle é lido pelo serviço da Realtek (`com.realtek.keyintercept`), que em modo Google TV não abre o app: ele avisa um receptor dentro do launcher do Google (`launcherx/.globalbutton.GlobalButtonLaunch_Receiver`), e só esse componente recebe o aviso. Com o launcher desativado, o botão não faz nada. A tecla também não chega ao Android, então nenhum outro app consegue tratá-la. Religar o launcher devolve os botões, mas ele volta a ser a tela inicial, e o `adb` não tem permissão para desligar só a tela dele. Os apps continuam a um clique em "Mais usados".
+
 ## Nomes na saudação
 
 Os nomes ficam salvos no aparelho, não no código:
